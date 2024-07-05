@@ -1,13 +1,12 @@
-use std::{hint, vec};
+use std::vec;
 
 use anyhow::Ok;
 use config::APP_CONFIG;
 use elasticsearch::{
-    http::{headers::HeaderMap, transport::Transport, Method},
-    params::Refresh,
-    BulkOperation, BulkParts, Elasticsearch, ScrollParts, SearchParts,
+    http::transport::Transport, params::Refresh, BulkOperation, BulkParts, Elasticsearch,
+    ScrollParts, SearchParts,
 };
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 
 mod config;
@@ -20,7 +19,7 @@ async fn main() -> anyhow::Result<()> {
     let transport = Transport::single_node(&APP_CONFIG.dest_url)?;
     let dest_client = Elasticsearch::new(transport);
 
-    let (tx, mut rx) = mpsc::channel(10000);
+    let (tx, rx) = mpsc::channel(10000);
 
     let mut producers = vec![];
 
@@ -52,7 +51,7 @@ async fn consume_hits(
     mut rx: Receiver<Vec<Value>>,
     dest_client: Elasticsearch,
 ) -> anyhow::Result<()> {
-    let capacity = APP_CONFIG.bulk_size;
+    let capacity = APP_CONFIG.bulk_size as usize;
     let mut ops: Vec<BulkOperation<Value>> = Vec::with_capacity(capacity);
 
     while let Some(hits) = rx.recv().await {
@@ -76,7 +75,7 @@ async fn consume_hits(
         }
     }
 
-    if ops.len() > 0 {
+    if !ops.is_empty() {
         let bulk_response = dest_client
             .bulk(BulkParts::Index(&APP_CONFIG.dest_index))
             .body(ops)
@@ -136,7 +135,7 @@ async fn produce_hits(
         .ok_or(anyhow::anyhow!("no _scroll_id"))?;
 
     // while hits are returned, keep asking for the next batch
-    while hits.len() > 0 {
+    while !hits.is_empty() {
         println!("send len: {}", hits.len());
         tx.send(hits.clone()).await?;
         response = src_client
