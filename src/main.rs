@@ -137,7 +137,7 @@ async fn produce_hits(
 
     // while hits are returned, keep asking for the next batch
     while !hits.is_empty() {
-        println!("send len: {}", hits.len());
+        // println!("send len: {}", hits.len());
         tx.send(hits.clone()).await?;
         response = src_client
             .scroll(ScrollParts::ScrollId(scroll_id))
