@@ -111,13 +111,13 @@ async fn produce_hits(
                 },
             "size": APP_CONFIG.size_per_page,
             "query": {
-                // "match_all": {},
-                "range": {
-                    "datetime": {
-                    "gte": 45180,
-                    "lte": 45180.299
-                    }
-                }
+                "match_all": {},
+                // "range": {
+                //     "datetime": {
+                //     "gte": 45180,
+                //     "lte": 45180.299
+                //     }
+                // }
             },
         }))
         .send()
