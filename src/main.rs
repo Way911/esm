@@ -1,7 +1,7 @@
 use std::vec;
 
 use anyhow::Ok;
-use config::APP_CONFIG;
+use config::{APP, APP_CONFIG};
 use elasticsearch::{
     http::transport::Transport, params::Refresh, BulkOperation, BulkParts, Elasticsearch,
     ScrollParts, SearchParts,
@@ -19,7 +19,7 @@ async fn main() -> anyhow::Result<()> {
     let transport = Transport::single_node(&APP_CONFIG.dest_url)?;
     let dest_client = Elasticsearch::new(transport);
 
-    let (tx, rx) = mpsc::channel(10000);
+    let (tx, rx) = mpsc::channel(APP.buffer_size as usize);
 
     let mut producers = vec![];
 
