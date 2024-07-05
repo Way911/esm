@@ -58,8 +58,9 @@ async fn consume_hits(
         for hit in hits {
             let id = hit["_id"].as_str().unwrap();
             let source = hit["_source"].as_object().unwrap().clone();
-            println!("{:?}", source);
+            // println!("{:?}", source);
             if ops.len() >= capacity {
+                println!("bulk send len: {}", ops.len());
                 let bulk_response = dest_client
                     .bulk(BulkParts::Index(&APP_CONFIG.dest_index))
                     .body(ops)
