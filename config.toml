@@ -1,0 +1,11 @@
+src_url = "http://10.168.1.4:9200"
+dest_url = "http://10.178.1.13:9200"
+
+src_index = "quotes-20220101"
+dest_index = "quotes-20220327"
+
+# Number of workers to use, should be same as number of index partitions
+worker_count = 3
+size_per_page = 1000
+
+bulk_size = 5000

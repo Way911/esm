@@ -1,0 +1,17 @@
+[package]
+edition = "2021"
+name = "esm"
+version = "0.0.1"
+
+[dependencies]
+
+clap = { version = "4.1", features = ["derive", "cargo"] } 
+
+tokio = { version = "1.26", features = ["full"] }
+anyhow = "1.0"
+
+elasticsearch = "7.17.7-alpha.1"
+serde = "1.0"
+serde_json = "1.0"
+
+toml = "0.8"
