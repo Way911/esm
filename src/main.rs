@@ -140,7 +140,7 @@ async fn produce_hits(
     src_client: Elasticsearch,
     tx: Sender<BulkOperation<Value>>,
 ) -> anyhow::Result<()> {
-    let scroll = "30s";
+    let scroll = "1m";
 
     // make a search API call
     let mut response = src_client
