@@ -28,7 +28,11 @@ async fn main() -> anyhow::Result<()> {
         let transport = Transport::single_node(dest_url)?;
         let dest_client = Elasticsearch::new(transport);
         let rx = rx.clone();
-        let consumer = tokio::spawn(consume_hits(rx, dest_client, total_count));
+        let consumer = tokio::spawn(consume_hits(
+            rx,
+            dest_client,
+            total_count / APP_CONFIG.dest_urls.len() as u64,
+        ));
         consumers.push(consumer);
     }
 
