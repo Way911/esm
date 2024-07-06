@@ -24,7 +24,7 @@ async fn main() -> anyhow::Result<()> {
     let transport = Transport::single_node(&APP_CONFIG.dest_url)?;
     let dest_client = Elasticsearch::new(transport);
 
-    let (tx, rx) = mpsc::channel(APP.buffer_size.unwrap() as usize);
+    let (tx, rx) = mpsc::channel(APP.buffer_size.unwrap());
 
     let mut producers = vec![];
 
