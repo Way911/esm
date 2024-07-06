@@ -15,7 +15,7 @@ pub(crate) struct App {
 pub(crate) struct AppConfig {
     pub src_url: String,
     pub src_index: String,
-    pub dest_url: String,
+    pub dest_urls: Vec<String>,
     pub dest_index: String,
     pub worker_count: u32,
     pub size_per_page: u32,

@@ -6,11 +6,9 @@ use elasticsearch::{
     http::transport::Transport, params::Refresh, BulkOperation, BulkParts, Elasticsearch,
     ScrollParts, SearchParts,
 };
+use flume::{Receiver, Sender};
 use serde_json::{json, Value};
-use tokio::{
-    sync::mpsc::{self, Receiver, Sender},
-    time::Instant,
-};
+use tokio::time::Instant;
 
 mod config;
 
@@ -21,14 +19,18 @@ async fn main() -> anyhow::Result<()> {
 
     let total_count = count_hits(src_client.clone()).await?;
 
-    let transport = Transport::single_node(&APP_CONFIG.dest_url)?;
-    let dest_client = Elasticsearch::new(transport);
-
-    let (tx, rx) = mpsc::channel(APP_CONFIG.bulk_size as usize * 2);
+    let (tx, rx) = flume::bounded(APP_CONFIG.bulk_size as usize * APP_CONFIG.dest_urls.len());
 
     let mut producers = vec![];
+    let mut consumers = vec![];
 
-    let consumer = tokio::spawn(consume_hits(rx, dest_client, total_count));
+    for dest_url in &APP_CONFIG.dest_urls {
+        let transport = Transport::single_node(dest_url)?;
+        let dest_client = Elasticsearch::new(transport);
+        let rx = rx.clone();
+        let consumer = tokio::spawn(consume_hits(rx, dest_client, total_count));
+        consumers.push(consumer);
+    }
 
     for id in 0..APP_CONFIG.worker_count {
         // The sender endpoint can be copied
@@ -45,8 +47,11 @@ async fn main() -> anyhow::Result<()> {
     }
 
     drop(tx);
-    if let Err(e) = consumer.await? {
-        eprintln!("error: {:?}", e);
+
+    for consumer in consumers {
+        if let Err(e) = consumer.await? {
+            eprintln!("error: {:?}", e);
+        }
     }
 
     Ok(())
@@ -70,7 +75,7 @@ async fn count_hits(client: Elasticsearch) -> anyhow::Result<u64> {
 }
 
 async fn consume_hits(
-    mut rx: Receiver<BulkOperation<Value>>,
+    rx: Receiver<BulkOperation<Value>>,
     dest_client: Elasticsearch,
     total_count: u64,
 ) -> anyhow::Result<()> {
@@ -79,7 +84,8 @@ async fn consume_hits(
     let mut start = Instant::now();
     let mut count = 0;
 
-    while let Some(op) = rx.recv().await {
+    while let core::result::Result::Ok(op) = rx.recv_async().await {
+        // println!("recv op");
         ops.push(op);
         if ops.len() >= capacity {
             let bulk_response = dest_client
@@ -175,7 +181,7 @@ async fn produce_hits(
             let id = hit["_id"].as_str().unwrap();
             let source = hit["_source"].as_object().unwrap().clone();
             let op = BulkOperation::index(json!(source)).id(id).into();
-            tx.send(op).await?;
+            tx.send_async(op).await?;
         }
 
         response = src_client
