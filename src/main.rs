@@ -32,7 +32,7 @@ async fn main() -> anyhow::Result<()> {
 
     for id in 0..APP_CONFIG.worker_count {
         // The sender endpoint can be copied
-        let thread_tx: Sender<Vec<Value>> = tx.clone();
+        let thread_tx: Sender<BulkOperation<Value>> = tx.clone();
         let src_client = src_client.clone();
         let p = tokio::spawn(produce_hits(id, src_client, thread_tx));
         producers.push(p);
@@ -70,7 +70,7 @@ async fn count_hits(client: Elasticsearch) -> anyhow::Result<u64> {
 }
 
 async fn consume_hits(
-    mut rx: Receiver<Vec<Value>>,
+    mut rx: Receiver<BulkOperation<Value>>,
     dest_client: Elasticsearch,
     total_count: u64,
 ) -> anyhow::Result<()> {
@@ -79,38 +79,32 @@ async fn consume_hits(
     let start = Instant::now();
     let mut count = 0;
 
-    while let Some(hits) = rx.recv().await {
-        for hit in hits {
-            let id = hit["_id"].as_str().unwrap();
-            let source = hit["_source"].as_object().unwrap().clone();
-            // println!("{:?}", source);
-            if ops.len() >= capacity {
-                let bulk_response = dest_client
-                    .bulk(BulkParts::Index(&APP_CONFIG.dest_index))
-                    .body(ops)
-                    .send()
-                    .await?;
-                if bulk_response.status_code() != 200 {
-                    anyhow::bail!("bulk error {:?}", bulk_response);
-                }
-                count += capacity;
-                let elapsed = start.elapsed();
-                // estimate time to complete
-                let etc_sec =
-                    elapsed.as_secs_f64() / count as f64 * (total_count - count as u64) as f64;
-                let etc_hour = etc_sec / 3600.0;
-                let etc_day = etc_hour / 24.0;
-                println!(
-                    "progress: {:.6}% ETC: {:.2} sec | {:.2} hour | {:.2} day",
-                    count as f64 / total_count as f64,
-                    etc_sec,
-                    etc_hour,
-                    etc_day
-                );
-                ops = Vec::with_capacity(capacity);
+    while let Some(op) = rx.recv().await {
+        ops.push(op);
+        if ops.len() >= capacity {
+            let bulk_response = dest_client
+                .bulk(BulkParts::Index(&APP_CONFIG.dest_index))
+                .body(ops)
+                .send()
+                .await?;
+            if bulk_response.status_code() != 200 {
+                anyhow::bail!("bulk error {:?}", bulk_response);
             }
-
-            ops.push(BulkOperation::index(json!(source)).id(id).into());
+            count += capacity;
+            let elapsed = start.elapsed();
+            // estimate time to complete
+            let etc_sec =
+                elapsed.as_secs_f64() / count as f64 * (total_count - count as u64) as f64;
+            let etc_hour = etc_sec / 3600.0;
+            let etc_day = etc_hour / 24.0;
+            println!(
+                "progress: {:.6}% ETC: {:.2} sec | {:.2} hour | {:.2} day",
+                count as f64 / total_count as f64,
+                etc_sec,
+                etc_hour,
+                etc_day
+            );
+            ops = Vec::with_capacity(capacity);
         }
     }
 
@@ -134,7 +128,7 @@ async fn consume_hits(
 async fn produce_hits(
     id: u32,
     src_client: Elasticsearch,
-    tx: Sender<Vec<Value>>,
+    tx: Sender<BulkOperation<Value>>,
 ) -> anyhow::Result<()> {
     let scroll = "30s";
 
@@ -176,7 +170,14 @@ async fn produce_hits(
     // while hits are returned, keep asking for the next batch
     while !hits.is_empty() {
         // println!("send len: {}", hits.len());
-        tx.send(hits.clone()).await?;
+
+        for hit in hits {
+            let id = hit["_id"].as_str().unwrap();
+            let source = hit["_source"].as_object().unwrap().clone();
+            let op = BulkOperation::index(json!(source)).id(id).into();
+            tx.send(op).await?;
+        }
+
         response = src_client
             .scroll(ScrollParts::ScrollId(scroll_id))
             .body(json!({
