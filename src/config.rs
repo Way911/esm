@@ -30,7 +30,7 @@ pub(crate) static APP: LazyLock<App> = LazyLock::new(App::parse);
 
 #[cfg(test)]
 pub(crate) static APP: LazyLock<App> = LazyLock::new(|| App {
-    cfg_file_path: "config.toml".to_string(),
+    cfg_file_path: ".tmp/config.toml".to_string(),
     buffer_size: Some(3000),
 });
 

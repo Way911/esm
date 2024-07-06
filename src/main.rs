@@ -16,6 +16,8 @@ async fn main() -> anyhow::Result<()> {
     let transport = Transport::single_node(&APP_CONFIG.src_url)?;
     let src_client = Elasticsearch::new(transport);
 
+    let total_count = count_hits(src_client.clone()).await?;
+
     let transport = Transport::single_node(&APP_CONFIG.dest_url)?;
     let dest_client = Elasticsearch::new(transport);
 
@@ -23,7 +25,7 @@ async fn main() -> anyhow::Result<()> {
 
     let mut producers = vec![];
 
-    let consumer = tokio::spawn(consume_hits(rx, dest_client));
+    let consumer = tokio::spawn(consume_hits(rx, dest_client, total_count));
 
     for id in 0..APP_CONFIG.worker_count {
         // The sender endpoint can be copied
@@ -47,12 +49,31 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+async fn count_hits(client: Elasticsearch) -> anyhow::Result<u64> {
+    let response = client
+        .count(elasticsearch::CountParts::Index(&[&APP_CONFIG.src_index]))
+        .body(json!({
+            "query": {
+                "match_all": {}
+            }
+        }))
+        .send()
+        .await?;
+
+    let response_body = response.json::<Value>().await?;
+    response_body["count"]
+        .as_u64()
+        .ok_or(anyhow::anyhow!("no count"))
+}
+
 async fn consume_hits(
     mut rx: Receiver<Vec<Value>>,
     dest_client: Elasticsearch,
+    total_count: u64,
 ) -> anyhow::Result<()> {
     let capacity = APP_CONFIG.bulk_size as usize;
     let mut ops: Vec<BulkOperation<Value>> = Vec::with_capacity(capacity);
+    let mut count = 0;
 
     while let Some(hits) = rx.recv().await {
         for hit in hits {
@@ -60,7 +81,6 @@ async fn consume_hits(
             let source = hit["_source"].as_object().unwrap().clone();
             // println!("{:?}", source);
             if ops.len() >= capacity {
-                println!("bulk send len: {}", ops.len());
                 let bulk_response = dest_client
                     .bulk(BulkParts::Index(&APP_CONFIG.dest_index))
                     .body(ops)
@@ -69,6 +89,8 @@ async fn consume_hits(
                 if bulk_response.status_code() != 200 {
                     anyhow::bail!("bulk error {:?}", bulk_response);
                 }
+                count += capacity;
+                println!("progress : {}%", count as f64 / total_count as f64);
                 ops = Vec::with_capacity(capacity);
             }
 
@@ -167,20 +189,10 @@ mod tests {
 
     #[tokio::test]
     #[ignore]
-    async fn test_produce_hits() {
-        let (tx, mut rx) = mpsc::channel(100);
-
-        tokio::spawn(async move {
-            for i in 0..10 {
-                if let Err(_) = tx.send(i).await {
-                    println!("receiver dropped");
-                    return;
-                }
-            }
-        });
-
-        while let Some(i) = rx.recv().await {
-            println!("got = {}", i);
-        }
+    async fn count_total() {
+        let transport = Transport::single_node(&APP_CONFIG.src_url).unwrap();
+        let src_client = Elasticsearch::new(transport);
+        let count = count_hits(src_client).await.unwrap();
+        println!("total hits: {}", count);
     }
 }
