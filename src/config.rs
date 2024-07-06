@@ -9,9 +9,6 @@ pub(crate) struct App {
     /// 配置文件路径 e.g. config.toml
     #[arg(short, long, default_value = "config.toml")]
     pub cfg_file_path: String,
-    /// 缓冲区大小 默认 3000
-    #[arg(short, long, default_value = "3000")]
-    pub buffer_size: Option<usize>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Default)]
@@ -31,7 +28,6 @@ pub(crate) static APP: LazyLock<App> = LazyLock::new(App::parse);
 #[cfg(test)]
 pub(crate) static APP: LazyLock<App> = LazyLock::new(|| App {
     cfg_file_path: ".tmp/config.toml".to_string(),
-    buffer_size: Some(3000),
 });
 
 pub(crate) static APP_CONFIG: LazyLock<AppConfig> = LazyLock::new(|| {
