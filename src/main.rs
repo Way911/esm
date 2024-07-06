@@ -7,7 +7,10 @@ use elasticsearch::{
     ScrollParts, SearchParts,
 };
 use serde_json::{json, Value};
-use tokio::sync::mpsc::{self, Receiver, Sender};
+use tokio::{
+    sync::mpsc::{self, Receiver, Sender},
+    time::Instant,
+};
 
 mod config;
 
@@ -73,6 +76,7 @@ async fn consume_hits(
 ) -> anyhow::Result<()> {
     let capacity = APP_CONFIG.bulk_size as usize;
     let mut ops: Vec<BulkOperation<Value>> = Vec::with_capacity(capacity);
+    let start = Instant::now();
     let mut count = 0;
 
     while let Some(hits) = rx.recv().await {
@@ -90,7 +94,19 @@ async fn consume_hits(
                     anyhow::bail!("bulk error {:?}", bulk_response);
                 }
                 count += capacity;
-                println!("progress : {}%", count as f64 / total_count as f64);
+                let elapsed = start.elapsed();
+                // estimate time to complete
+                let etc_sec =
+                    elapsed.as_secs_f64() / count as f64 * (total_count - count as u64) as f64;
+                let etc_hour = etc_sec / 3600.0;
+                let etc_day = etc_hour / 24.0;
+                println!(
+                    "progress: {:.6}% ETC: {:.2} sec | {:.2} hour | {:.2} day",
+                    count as f64 / total_count as f64,
+                    etc_sec,
+                    etc_hour,
+                    etc_day
+                );
                 ops = Vec::with_capacity(capacity);
             }
 
@@ -190,9 +206,11 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn count_total() {
+        let start = Instant::now();
         let transport = Transport::single_node(&APP_CONFIG.src_url).unwrap();
         let src_client = Elasticsearch::new(transport);
         let count = count_hits(src_client).await.unwrap();
         println!("total hits: {}", count);
+        println!("time: {:?}", start.elapsed());
     }
 }
