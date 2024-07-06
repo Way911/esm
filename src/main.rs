@@ -98,7 +98,7 @@ async fn consume_hits(
             let etc_hour = etc_sec / 3600.0;
             let etc_day = etc_hour / 24.0;
             println!(
-                "progress: {:.6}% ETC: {:.2} sec | {:.2} hour | {:.2} day",
+                "progress: {:.3}% ETC: {:.2} sec | {:.2} hour | {:.2} day",
                 count as f64 / total_count as f64 * 100.0,
                 etc_sec,
                 etc_hour,
