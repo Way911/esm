@@ -76,7 +76,7 @@ async fn consume_hits(
 ) -> anyhow::Result<()> {
     let capacity = APP_CONFIG.bulk_size as usize;
     let mut ops: Vec<BulkOperation<Value>> = Vec::with_capacity(capacity);
-    let start = Instant::now();
+    let mut start = Instant::now();
     let mut count = 0;
 
     while let Some(op) = rx.recv().await {
@@ -91,10 +91,9 @@ async fn consume_hits(
                 anyhow::bail!("bulk error {:?}", bulk_response);
             }
             count += capacity;
-            let elapsed = start.elapsed();
+            let elapsed = start.elapsed().as_secs_f64();
             // estimate time to complete
-            let etc_sec =
-                elapsed.as_secs_f64() / count as f64 * (total_count - count as u64) as f64;
+            let etc_sec = elapsed / (capacity as f64) * (total_count - count as u64) as f64;
             let etc_hour = etc_sec / 3600.0;
             let etc_day = etc_hour / 24.0;
             println!(
@@ -105,6 +104,7 @@ async fn consume_hits(
                 etc_day
             );
             ops = Vec::with_capacity(capacity);
+            start = Instant::now();
         }
     }
 
