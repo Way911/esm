@@ -129,9 +129,9 @@ async fn consume_hits(
         if bulk_response.status_code() != 200 {
             anyhow::bail!("bulk error {:?}", bulk_response);
         }
-        println!("{:?}", bulk_response);
     }
 
+    println!("consumer done");
     Ok(())
 }
 
