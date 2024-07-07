@@ -131,7 +131,7 @@ async fn consume_hits(
         }
     }
 
-    println!("consumer done");
+    println!("consumer done {:?}", dest_client.transport());
     Ok(())
 }
 
@@ -205,7 +205,7 @@ async fn produce_hits(
             .as_array()
             .ok_or(anyhow::anyhow!("no hits"))?;
     }
-    println!("worker {} done", id);
+    println!("producer {} done", id);
 
     Ok(())
 }
@@ -220,6 +220,7 @@ mod tests {
         let start = Instant::now();
         let transport = Transport::single_node(&APP_CONFIG.src_url).unwrap();
         let src_client = Elasticsearch::new(transport);
+        println!("{:?}", src_client.transport());
         let count = count_hits(src_client).await.unwrap();
         println!("total hits: {}", count);
         println!("time: {:?}", start.elapsed());
