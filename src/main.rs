@@ -1,7 +1,7 @@
 use std::vec;
 
 use anyhow::Ok;
-use config::{APP, APP_CONFIG};
+use config::APP_CONFIG;
 use elasticsearch::{
     http::transport::Transport, params::Refresh, BulkOperation, BulkParts, Elasticsearch,
     ScrollParts, SearchParts,
