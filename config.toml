@@ -4,7 +4,10 @@ dest_urls = ["http://10.178.1.11:9200","http://10.178.1.12:9200","http://10.178.
 src_index = "quotes-20220101"
 dest_index = "quotes-20220327"
 
-# Number of workers to use, should be same as number of index partitions
+# For time series data, it should be '@timestamp', otherwise it should be '_id'
+slice_field = "@timestamp"
+
+# Number of workers to use, should be same as number of index partitions and must > 1
 worker_count = 3
 size_per_page = 1000
 
