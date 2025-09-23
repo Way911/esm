@@ -9,6 +9,9 @@ pub(crate) struct App {
     /// 配置文件路径 e.g. config.toml
     #[arg(short, long, default_value = "config.toml")]
     pub cfg_file_path: String,
+    /// elasticsearch query json e.g. {"query": {"match_all": {}}}
+    #[arg(short, long)]
+    pub query_json: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Default)]
@@ -29,6 +32,7 @@ pub(crate) static APP: LazyLock<App> = LazyLock::new(App::parse);
 #[cfg(test)]
 pub(crate) static APP: LazyLock<App> = LazyLock::new(|| App {
     cfg_file_path: ".tmp/config.toml".to_string(),
+    query_json: None,
 });
 
 pub(crate) static APP_CONFIG: LazyLock<AppConfig> = LazyLock::new(|| {

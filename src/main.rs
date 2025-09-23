@@ -10,6 +10,8 @@ use flume::{Receiver, Sender};
 use serde_json::{json, Value};
 use tokio::time::Instant;
 
+use crate::config::APP;
+
 mod config;
 
 #[tokio::main]
@@ -142,6 +144,21 @@ async fn produce_hits(
 ) -> anyhow::Result<()> {
     let scroll = "1m";
 
+    let query = match APP.query_json.clone() {
+        Some(json_string) => serde_json::from_str(&json_string)?,
+        None => json!(
+            {
+                "match_all": {}
+                // "range": {
+                //     "datetime": {
+                //     "gte": 45180,
+                //     "lte": 45180.299
+                //     }
+                // }
+            }
+        ),
+    };
+
     // make a search API call
     let mut response = src_client
         .search(SearchParts::Index(&[&APP_CONFIG.src_index]))
@@ -153,15 +170,7 @@ async fn produce_hits(
                     "max": APP_CONFIG.worker_count,
                 },
             "size": APP_CONFIG.size_per_page,
-            "query": {
-                "match_all": {},
-                // "range": {
-                //     "datetime": {
-                //     "gte": 45180,
-                //     "lte": 45180.299
-                //     }
-                // }
-            },
+            "query": query,
         }))
         .send()
         .await?;
