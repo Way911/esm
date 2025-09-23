@@ -38,7 +38,7 @@ async fn main() -> anyhow::Result<()> {
         consumers.push(consumer);
     }
 
-    for id in 0..(APP_CONFIG.worker_count - 1) {
+    for id in 0..APP_CONFIG.worker_count {
         // The sender endpoint can be copied
         let thread_tx: Sender<BulkOperation<Value>> = tx.clone();
         let src_client = src_client.clone();
@@ -262,7 +262,7 @@ mod tests {
         });
 
         let mut producers = vec![];
-        for id in 0..(APP_CONFIG.worker_count - 1) {
+        for id in 0..APP_CONFIG.worker_count {
             // The sender endpoint can be copied
             let thread_tx: Sender<BulkOperation<Value>> = tx.clone();
             let src_client = src_client.clone();
