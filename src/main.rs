@@ -234,7 +234,9 @@ async fn produce_hits(
             if start.elapsed().as_secs_f64() > 5.0 {
                 sleep_time = match fs::read_to_string(".ratelimit").await {
                     std::result::Result::Ok(content) => {
-                        println!("ratelimit: {}", content.trim());
+                        if id == 0 {
+                            println!("ratelimit: {}", content.trim());
+                        }
                         content.trim().parse().unwrap()
                     }
                     Err(_) => 0.0,
