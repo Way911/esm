@@ -211,7 +211,7 @@ async fn produce_hits(
     let mut sleep_time = match fs::read_to_string(".ratelimit").await {
         std::result::Result::Ok(content) => {
             println!("ratelimit: {}", content);
-            content.parse().unwrap()
+            content.trim().parse().unwrap()
         }
 
         Err(_) => -1.0,
@@ -233,7 +233,7 @@ async fn produce_hits(
             let elapsed = start.elapsed().as_secs_f64();
             if elapsed > sleep_time {
                 sleep_time = match fs::read_to_string(".ratelimit").await {
-                    std::result::Result::Ok(content) => content.parse().unwrap(),
+                    std::result::Result::Ok(content) => content.trim().parse().unwrap(),
                     Err(_) => -1.0,
                 };
                 time::sleep(Duration::from_millis(sleep_time as u64)).await;
@@ -314,7 +314,7 @@ mod tests {
     #[ignore]
     async fn test_read_file() {
         let mut sleep_time = match fs::read_to_string(".ratelimit").await {
-            std::result::Result::Ok(content) => content.parse().unwrap(),
+            std::result::Result::Ok(content) => content.trim().parse().unwrap(),
             Err(_) => -1.0,
         };
         time::sleep(Duration::from_millis(sleep_time as u64)).await;
@@ -328,7 +328,7 @@ mod tests {
                 let elapsed = start.elapsed().as_secs_f64();
                 if elapsed > sleep_time {
                     sleep_time = match fs::read_to_string(".ratelimit").await {
-                        std::result::Result::Ok(content) => content.parse().unwrap(),
+                        std::result::Result::Ok(content) => content.trim().parse().unwrap(),
                         Err(_) => -1.0,
                     };
                     time::sleep(Duration::from_millis(sleep_time as u64)).await;
