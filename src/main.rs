@@ -128,11 +128,11 @@ async fn consume_hits(
             let etc_hour = etc_sec / 3600.0;
             let etc_day = etc_hour / 24.0;
             println!(
-                "consumer progress: {:.2}% ETC: {:.2} sec | {:.2} hour | {:.2} day",
+                "consumer progress: {:.2}% ETC: {:.2} day | {:.2} hour | {:.2} sec",
                 count as f64 / total_count as f64 * 100.0,
-                etc_sec,
+                etc_day,
                 etc_hour,
-                etc_day
+                etc_sec
             );
             ops = Vec::with_capacity(capacity);
             start = Instant::now();
