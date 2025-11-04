@@ -208,7 +208,7 @@ async fn produce_hits(
         .as_str()
         .ok_or(anyhow::anyhow!("no _scroll_id"))?;
     let mut start = Instant::now();
-    let sleep_time: f64 = match fs::read_to_string(".ratelimit").await {
+    let mut sleep_time = match fs::read_to_string(".ratelimit").await {
         std::result::Result::Ok(content) => content.parse()?,
         Err(_) => -1.0,
     };
@@ -228,6 +228,10 @@ async fn produce_hits(
         if sleep_time > 0.0 {
             let elapsed = start.elapsed().as_secs_f64();
             if elapsed > sleep_time {
+                sleep_time = match fs::read_to_string(".ratelimit").await {
+                    std::result::Result::Ok(content) => content.parse()?,
+                    Err(_) => -1.0,
+                };
                 time::sleep(Duration::from_millis(sleep_time as u64)).await;
                 start = Instant::now();
             }
