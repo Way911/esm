@@ -209,7 +209,7 @@ async fn produce_hits(
         .ok_or(anyhow::anyhow!("no _scroll_id"))?;
     let mut start = Instant::now();
     let mut sleep_time = match fs::read_to_string(".ratelimit").await {
-        std::result::Result::Ok(content) => content.parse()?,
+        std::result::Result::Ok(content) => content.parse().unwrap(),
         Err(_) => -1.0,
     };
 
@@ -229,7 +229,7 @@ async fn produce_hits(
             let elapsed = start.elapsed().as_secs_f64();
             if elapsed > sleep_time {
                 sleep_time = match fs::read_to_string(".ratelimit").await {
-                    std::result::Result::Ok(content) => content.parse()?,
+                    std::result::Result::Ok(content) => content.parse().unwrap(),
                     Err(_) => -1.0,
                 };
                 time::sleep(Duration::from_millis(sleep_time as u64)).await;
@@ -304,5 +304,33 @@ mod tests {
         }
 
         drop(tx);
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_read_file() {
+        let mut sleep_time = match fs::read_to_string(".ratelimit").await {
+            std::result::Result::Ok(content) => content.parse().unwrap(),
+            Err(_) => -1.0,
+        };
+        time::sleep(Duration::from_millis(sleep_time as u64)).await;
+        assert_eq!(sleep_time, 100.0);
+
+        let mut start = Instant::now();
+        let mut i = 100;
+        while i > 0 {
+            i = i - 1;
+            if sleep_time > 0.0 {
+                let elapsed = start.elapsed().as_secs_f64();
+                if elapsed > sleep_time {
+                    sleep_time = match fs::read_to_string(".ratelimit").await {
+                        std::result::Result::Ok(content) => content.parse().unwrap(),
+                        Err(_) => -1.0,
+                    };
+                    time::sleep(Duration::from_millis(sleep_time as u64)).await;
+                    start = Instant::now();
+                }
+            }
+        }
     }
 }
