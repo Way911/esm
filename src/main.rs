@@ -209,7 +209,11 @@ async fn produce_hits(
         .ok_or(anyhow::anyhow!("no _scroll_id"))?;
     let mut start = Instant::now();
     let mut sleep_time = match fs::read_to_string(".ratelimit").await {
-        std::result::Result::Ok(content) => content.parse().unwrap(),
+        std::result::Result::Ok(content) => {
+            println!("ratelimit: {}", content);
+            content.parse().unwrap()
+        }
+
         Err(_) => -1.0,
     };
 
