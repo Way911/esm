@@ -1,4 +1,4 @@
-use std::vec;
+use std::{time::Duration, vec};
 
 use anyhow::Ok;
 use config::APP_CONFIG;
@@ -8,7 +8,10 @@ use elasticsearch::{
 };
 use flume::{Receiver, Sender};
 use serde_json::{json, Value};
-use tokio::time::Instant;
+use tokio::{
+    fs,
+    time::{self, Instant},
+};
 
 use crate::config::APP;
 
@@ -204,6 +207,11 @@ async fn produce_hits(
     let mut scroll_id = response_body["_scroll_id"]
         .as_str()
         .ok_or(anyhow::anyhow!("no _scroll_id"))?;
+    let mut start = Instant::now();
+    let sleep_time: f64 = match fs::read_to_string(".ratelimit").await {
+        std::result::Result::Ok(content) => content.parse()?,
+        Err(_) => -1.0,
+    };
 
     // while hits are returned, keep asking for the next batch
     while !hits.is_empty() {
@@ -214,6 +222,15 @@ async fn produce_hits(
             let source = hit["_source"].as_object().unwrap().clone();
             let op = BulkOperation::index(json!(source)).id(id).into();
             tx.send_async(op).await?;
+        }
+
+        // sleep if rate limit file is provided and elapsed time
+        if sleep_time > 0.0 {
+            let elapsed = start.elapsed().as_secs_f64();
+            if elapsed > sleep_time {
+                time::sleep(Duration::from_millis(sleep_time as u64)).await;
+                start = Instant::now();
+            }
         }
 
         response = src_client
