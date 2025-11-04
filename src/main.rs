@@ -207,7 +207,6 @@ async fn produce_hits(
     let mut scroll_id = response_body["_scroll_id"]
         .as_str()
         .ok_or(anyhow::anyhow!("no _scroll_id"))?;
-    let mut start = Instant::now();
     let mut sleep_time = match fs::read_to_string(".ratelimit").await {
         std::result::Result::Ok(content) => {
             println!("ratelimit: {}", content);
@@ -230,15 +229,11 @@ async fn produce_hits(
 
         // sleep if rate limit file is provided and elapsed time
         if sleep_time > 0.0 {
-            let elapsed = start.elapsed().as_secs_f64();
-            if elapsed > sleep_time {
-                sleep_time = match fs::read_to_string(".ratelimit").await {
-                    std::result::Result::Ok(content) => content.trim().parse().unwrap(),
-                    Err(_) => -1.0,
-                };
-                time::sleep(Duration::from_millis(sleep_time as u64)).await;
-                start = Instant::now();
-            }
+            time::sleep(Duration::from_millis(sleep_time as u64)).await;
+            sleep_time = match fs::read_to_string(".ratelimit").await {
+                std::result::Result::Ok(content) => content.trim().parse().unwrap(),
+                Err(_) => -1.0,
+            };
         }
 
         response = src_client
