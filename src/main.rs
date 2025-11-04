@@ -231,7 +231,7 @@ async fn produce_hits(
         // sleep if rate limit file is provided and elapsed time
         if sleep_time >= 0.0 {
             time::sleep(Duration::from_millis(sleep_time as u64)).await;
-            if start.elapsed().as_secs_f64() > 5.0 {
+            if start.elapsed().as_secs_f64() > 10.0 {
                 sleep_time = match fs::read_to_string(".ratelimit").await {
                     std::result::Result::Ok(content) => {
                         if id == 0 {
