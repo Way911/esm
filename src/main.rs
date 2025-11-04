@@ -65,7 +65,10 @@ async fn main() -> anyhow::Result<()> {
 
 async fn count_hits(client: Elasticsearch) -> anyhow::Result<u64> {
     let query = match APP.query_json.clone() {
-        Some(json_string) => serde_json::from_str(&json_string)?,
+        Some(json_string) => {
+            println!("query json: {}", json_string);
+            serde_json::from_str(&json_string)?
+        }
         None => json!(
             {
                 "match_all": {}
