@@ -230,10 +230,7 @@ async fn produce_hits(
         if sleep_time > 0.0 {
             time::sleep(Duration::from_millis(sleep_time as u64)).await;
             sleep_time = match fs::read_to_string(".ratelimit").await {
-                std::result::Result::Ok(content) => {
-                    println!("ratelimit: {}", content.trim());
-                    content.trim().parse().unwrap()
-                }
+                std::result::Result::Ok(content) => content.trim().parse().unwrap(),
                 Err(_) => -1.0,
             };
         }
