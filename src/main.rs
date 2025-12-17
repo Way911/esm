@@ -307,36 +307,36 @@ mod tests {
         println!("time: {:?}", start.elapsed());
     }
 
-    #[tokio::test]
-    #[ignore]
-    async fn test_produce_hits() {
-        let transport = Transport::single_node(&APP_CONFIG.src_url).unwrap();
-        let src_client = Elasticsearch::new(transport);
-        let (tx, rx) = flume::bounded(APP_CONFIG.bulk_size as usize * APP_CONFIG.dest_urls.len());
+    // #[tokio::test]
+    // #[ignore]
+    // async fn test_produce_hits() {
+    //     let transport = Transport::single_node(&APP_CONFIG.src_url).unwrap();
+    //     let src_client = Elasticsearch::new(transport);
+    //     let (tx, rx) = flume::bounded(APP_CONFIG.bulk_size as usize * APP_CONFIG.dest_urls.len());
 
-        tokio::spawn(async move {
-            while let core::result::Result::Ok(_op) = rx.recv_async().await {
-                println!("recv op");
-            }
-        });
+    //     tokio::spawn(async move {
+    //         while let core::result::Result::Ok(_op) = rx.recv_async().await {
+    //             println!("recv op");
+    //         }
+    //     });
 
-        let mut producers = vec![];
-        for id in 0..APP_CONFIG.worker_count {
-            // The sender endpoint can be copied
-            let thread_tx: Sender<BulkOperation<Value>> = tx.clone();
-            let src_client = src_client.clone();
-            let p = tokio::spawn(produce_hits(id, src_client, thread_tx));
-            producers.push(p);
-        }
+    //     let mut producers = vec![];
+    //     for id in 0..APP_CONFIG.worker_count {
+    //         // The sender endpoint can be copied
+    //         let thread_tx: Sender<BulkOperation<Value>> = tx.clone();
+    //         let src_client = src_client.clone();
+    //         let p = tokio::spawn(produce_hits(id, src_client, thread_tx));
+    //         producers.push(p);
+    //     }
 
-        for p in producers {
-            if let Err(e) = p.await.unwrap() {
-                eprintln!("error: {:?}", e);
-            }
-        }
+    //     for p in producers {
+    //         if let Err(e) = p.await.unwrap() {
+    //             eprintln!("error: {:?}", e);
+    //         }
+    //     }
 
-        drop(tx);
-    }
+    //     drop(tx);
+    // }
 
     #[tokio::test]
     #[ignore]
