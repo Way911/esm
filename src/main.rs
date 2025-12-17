@@ -51,11 +51,16 @@ async fn main() -> anyhow::Result<()> {
         consumers.push(consumer);
     }
 
+    let progress_style = ProgressStyle::with_template("{msg}").unwrap();
+
     for id in 0..APP_CONFIG.worker_count {
+        let progress_bar = multi_progress.add(ProgressBar::new(0)); // Add a new progress bar
+        progress_bar.set_style(progress_style.clone());
+
         // The sender endpoint can be copied
         let thread_tx: Sender<BulkOperation<Value>> = tx.clone();
         let src_client = src_client.clone();
-        let p = tokio::spawn(produce_hits(id, src_client, thread_tx));
+        let p = tokio::spawn(produce_hits(id, src_client, thread_tx, progress_bar));
         producers.push(p);
     }
 
@@ -179,7 +184,11 @@ async fn produce_hits(
     id: u32,
     src_client: Elasticsearch,
     tx: Sender<BulkOperation<Value>>,
+    progress_bar: ProgressBar,
 ) -> anyhow::Result<()> {
+    progress_bar
+        .clone()
+        .with_message(format!("producer #{} running", id));
     let scroll = "1m";
 
     let query = match APP.query_json.clone() {
@@ -224,10 +233,7 @@ async fn produce_hits(
         .as_str()
         .ok_or(anyhow::anyhow!("no _scroll_id"))?;
     let mut sleep_time = match fs::read_to_string(".ratelimit").await {
-        std::result::Result::Ok(content) => {
-            println!("ratelimit: {}", content.trim());
-            content.trim().parse().unwrap()
-        }
+        std::result::Result::Ok(content) => content.trim().parse().unwrap(),
         Err(_) => -1.0,
     };
 
@@ -254,9 +260,9 @@ async fn produce_hits(
                 };
                 if tmp_sleep_time != sleep_time {
                     sleep_time = tmp_sleep_time;
-                    if id == 0 {
-                        println!("ratelimit: {}", sleep_time);
-                    }
+                    progress_bar
+                        .clone()
+                        .with_message(format!("producer #{} ratelimit: {}", id, sleep_time));
                 }
                 start = Instant::now();
             }
@@ -279,7 +285,7 @@ async fn produce_hits(
             .as_array()
             .ok_or(anyhow::anyhow!("no hits"))?;
     }
-    println!("producer #{} done", id);
+    progress_bar.finish_with_message(format!("producer #{} done", id));
 
     Ok(())
 }
