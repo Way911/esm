@@ -345,7 +345,7 @@ mod tests {
         let mut start = Instant::now();
         let mut i = 100;
         while i > 0 {
-            i = i - 1;
+            i -= i;
             if sleep_time > 0.0 {
                 let elapsed = start.elapsed().as_secs_f64();
                 if elapsed > sleep_time {
@@ -365,7 +365,7 @@ mod tests {
     async fn test_progress_bar() {
         let sleep_time = match fs::read_to_string(".ratelimit").await {
             std::result::Result::Ok(content) => content.trim().parse().unwrap(),
-            Err(_) => 1000 as usize,
+            Err(_) => 1000_usize,
         };
         // Create a MultiProgress object
         let multi_progress = MultiProgress::new();
