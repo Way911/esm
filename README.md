@@ -9,4 +9,4 @@ Options:
   -h, --help                           Print help
   -V, --version                        Print version
 ```
-<img src="images/image.png" width="80%" />
+<img src="images/image.png" width="90%" />
