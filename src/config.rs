@@ -6,10 +6,10 @@ use serde::{Deserialize, Serialize};
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 pub(crate) struct App {
-    /// 配置文件路径 e.g. config.toml
+    /// config file path e.g. config.toml
     #[arg(short, long, default_value = "config.toml")]
     pub cfg_file_path: String,
-    /// elasticsearch query json e.g. {"query": {"match_all": {}}}
+    /// elasticsearch query json e.g. '{"match":{"trading_date":"20251217"}}'
     #[arg(short, long)]
     pub query_json: Option<String>,
 }
