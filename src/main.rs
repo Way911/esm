@@ -31,7 +31,7 @@ async fn main() -> anyhow::Result<()> {
         "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
     )
     .unwrap()
-    .progress_chars("#+-");
+    .progress_chars("#>-");
 
     let total_count = count_hits(src_client.clone()).await?;
 
@@ -374,7 +374,7 @@ mod tests {
             "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
         )
         .unwrap()
-        .progress_chars("#+-");
+        .progress_chars("#>-");
 
         let mut consumers = vec![];
 
