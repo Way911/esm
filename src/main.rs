@@ -188,7 +188,7 @@ async fn produce_hits(
 ) -> anyhow::Result<()> {
     progress_bar
         .clone()
-        .with_message(format!("producer #{} running", id));
+        .set_message(format!("producer #{} running", id));
     let scroll = "1m";
 
     let query = match APP.query_json.clone() {
@@ -262,7 +262,7 @@ async fn produce_hits(
                     sleep_time = tmp_sleep_time;
                     progress_bar
                         .clone()
-                        .with_message(format!("producer #{} ratelimit: {}", id, sleep_time));
+                        .set_message(format!("producer #{} ratelimit: {}", id, sleep_time));
                 }
                 start = Instant::now();
             }
