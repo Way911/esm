@@ -13,6 +13,8 @@ use tokio::{
     time::{self, Instant},
 };
 
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+
 use crate::config::APP;
 
 mod config;
@@ -22,6 +24,15 @@ async fn main() -> anyhow::Result<()> {
     let transport = Transport::single_node(&APP_CONFIG.src_url)?;
     let src_client = Elasticsearch::new(transport);
 
+    // Create a MultiProgress object
+    let multi_progress = MultiProgress::new();
+    // Define a common progress bar style
+    let progress_style = ProgressStyle::with_template(
+        "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
+    )
+    .unwrap()
+    .progress_chars("#+-");
+
     let total_count = count_hits(src_client.clone()).await?;
 
     let (tx, rx) = flume::bounded(APP_CONFIG.bulk_size as usize * APP_CONFIG.dest_urls.len());
@@ -30,14 +41,13 @@ async fn main() -> anyhow::Result<()> {
     let mut consumers = vec![];
 
     for dest_url in &APP_CONFIG.dest_urls {
-        let transport = Transport::single_node(dest_url)?;
-        let dest_client = Elasticsearch::new(transport);
+        let tmp_total_count = total_count / APP_CONFIG.dest_urls.len() as u64;
+        let progress_bar = multi_progress.add(ProgressBar::new(tmp_total_count)); // Add a new progress bar
+        progress_bar.set_style(progress_style.clone());
+        progress_bar.set_message(format!("Consumer {}", dest_url));
+
         let rx = rx.clone();
-        let consumer = tokio::spawn(consume_hits(
-            rx,
-            dest_client,
-            total_count / APP_CONFIG.dest_urls.len() as u64,
-        ));
+        let consumer = tokio::spawn(consume_hits(rx, dest_url, tmp_total_count, progress_bar));
         consumers.push(consumer);
     }
 
@@ -101,9 +111,13 @@ async fn count_hits(client: Elasticsearch) -> anyhow::Result<u64> {
 
 async fn consume_hits(
     rx: Receiver<BulkOperation<Value>>,
-    dest_client: Elasticsearch,
+    dest_url: &str,
     total_count: u64,
+    progress_bar: ProgressBar,
 ) -> anyhow::Result<()> {
+    let transport = Transport::single_node(dest_url)?;
+    let dest_client = Elasticsearch::new(transport);
+
     let capacity = APP_CONFIG.bulk_size as usize;
     let mut ops: Vec<BulkOperation<Value>> = Vec::with_capacity(capacity);
     let mut start = Instant::now();
@@ -124,16 +138,19 @@ async fn consume_hits(
             count += capacity;
             let elapsed = start.elapsed().as_secs_f64();
             // estimate time to complete
-            let etc_sec = elapsed / (capacity as f64) * (total_count - count as u64) as f64;
+            let etc_sec = elapsed / (capacity as f64) * (total_count as f64 - count as f64);
             let etc_hour = etc_sec / 3600.0;
             let etc_day = etc_hour / 24.0;
-            println!(
-                "consumer progress: {:.2}% ETC: {:.2} day | {:.2} hour | {:.2} sec",
-                count as f64 / total_count as f64 * 100.0,
-                etc_day,
-                etc_hour,
-                etc_sec
-            );
+            progress_bar
+                .clone()
+                .with_message(format!(
+                    "{:.2}% ETC: {:.2} day | {:.2} hour | {:.2} sec",
+                    count as f64 / total_count as f64 * 100.0,
+                    etc_day,
+                    etc_hour,
+                    etc_sec
+                ))
+                .inc(capacity as u64);
             ops = Vec::with_capacity(capacity);
             start = Instant::now();
         }
@@ -151,11 +168,10 @@ async fn consume_hits(
             anyhow::bail!("bulk error {:?}", bulk_response);
         }
     }
-
-    println!(
-        "consumer done {:?} total_count: {}",
-        APP_CONFIG.dest_urls, total_count
-    );
+    progress_bar.finish_with_message(format!(
+        "{} finished, total_count: {}",
+        dest_url, total_count
+    ));
     Ok(())
 }
 
@@ -231,16 +247,17 @@ async fn produce_hits(
         // sleep if rate limit file is provided and elapsed time
         if sleep_time >= 0.0 {
             time::sleep(Duration::from_millis(sleep_time as u64)).await;
-            if start.elapsed().as_secs_f64() > 10.0 {
-                sleep_time = match fs::read_to_string(".ratelimit").await {
-                    std::result::Result::Ok(content) => {
-                        if id == 0 {
-                            println!("ratelimit: {}", content.trim());
-                        }
-                        content.trim().parse().unwrap()
-                    }
+            if start.elapsed().as_secs_f64() > 60.0 {
+                let tmp_sleep_time = match fs::read_to_string(".ratelimit").await {
+                    std::result::Result::Ok(content) => content.trim().parse().unwrap(),
                     Err(_) => 0.0,
                 };
+                if tmp_sleep_time != sleep_time {
+                    sleep_time = tmp_sleep_time;
+                    if id == 0 {
+                        println!("ratelimit: {}", sleep_time);
+                    }
+                }
                 start = Instant::now();
             }
         }
@@ -269,6 +286,7 @@ async fn produce_hits(
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
 
     #[tokio::test]
@@ -340,5 +358,81 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_progress_bar() {
+        let sleep_time = match fs::read_to_string(".ratelimit").await {
+            std::result::Result::Ok(content) => content.trim().parse().unwrap(),
+            Err(_) => 1000 as usize,
+        };
+        // Create a MultiProgress object
+        let multi_progress = MultiProgress::new();
+        // Define a common progress bar style
+        let progress_style = ProgressStyle::with_template(
+            "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
+        )
+        .unwrap()
+        .progress_chars("#+-");
+
+        let mut consumers = vec![];
+
+        for i in 0..10 {
+            let tmp_total_count = 888;
+            let progress_bar = multi_progress.add(ProgressBar::new(tmp_total_count)); // Add a new progress bar
+            progress_bar.set_style(progress_style.clone());
+            progress_bar.set_message(format!("Processing #{}", i));
+
+            let consumer = tokio::spawn(consume_hits(i, sleep_time, tmp_total_count, progress_bar));
+            consumers.push(consumer);
+        }
+
+        let progress_bar = multi_progress.add(ProgressBar::new(0)); // Add a new progress bar
+        progress_bar.set_style(ProgressStyle::with_template("{msg}").unwrap());
+        progress_bar.set_message(format!("Sleep Time {}", sleep_time));
+
+        for consumer in consumers {
+            if let Err(e) = consumer.await {
+                eprintln!("error: {:?}", e);
+            }
+        }
+    }
+
+    async fn consume_hits(id: u32, sleep_time: usize, total_count: u64, progress_bar: ProgressBar) {
+        let mut count = 0;
+        let capacity = 10;
+        let mut start = Instant::now();
+        while count < total_count {
+            // println!("recv op");
+            time::sleep(Duration::from_millis(sleep_time as u64)).await;
+
+            count += capacity;
+            let elapsed = start.elapsed().as_secs_f64();
+            // estimate time to complete
+            let etc_sec = elapsed / (capacity as f64) * (total_count as f64 - count as f64);
+            let etc_hour = etc_sec / 3600.0;
+            let etc_day = etc_hour / 24.0;
+            // println!(
+            //     "consumer progress: {:.2}% ETC: {:.2} day | {:.2} hour | {:.2} sec",
+            //     count as f64 / total_count as f64 * 100.0,
+            //     etc_day,
+            //     etc_hour,
+            //     etc_sec
+            // );
+            progress_bar
+                .clone()
+                .with_message(format!(
+                    "{:.2}% ETC: {:.2} day | {:.2} hour | {:.2} sec",
+                    count as f64 / total_count as f64 * 100.0,
+                    etc_day,
+                    etc_hour,
+                    etc_sec
+                ))
+                .inc(capacity);
+            start = Instant::now();
+        }
+
+        progress_bar.finish_with_message(format!("#{} finished, total_count: {}", id, total_count));
     }
 }
