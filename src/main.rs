@@ -227,7 +227,7 @@ async fn produce_hits(
 
         let elapsed = start.elapsed().as_secs_f64();
 
-        if elapsed > 30.0 {
+        if elapsed > 15.0 {
             count = count + inc;
             // estimate time to complete
             let etc_sec = elapsed / (inc as f64) * (total_count as f64 - count as f64);
