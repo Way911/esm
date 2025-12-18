@@ -13,7 +13,7 @@ use tokio::{
     time::{self, Instant},
 };
 
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use indicatif::{HumanDuration, MultiProgress, ProgressBar, ProgressStyle};
 
 use crate::config::APP;
 
@@ -205,6 +205,7 @@ async fn produce_hits(
 
     let mut start = Instant::now();
     let mut count = 0;
+    let mut inc = 0;
 
     // while hits are returned, keep asking for the next batch
     while !hits.is_empty() {
@@ -217,14 +218,32 @@ async fn produce_hits(
             tx.send_async(op).await?;
         }
 
+        inc += hits.len();
+
         // sleep if rate limit file is provided and elapsed time
         if sleep_time >= 0.0 {
             time::sleep(Duration::from_millis(sleep_time as u64)).await;
         }
 
-        count += APP_CONFIG.size_per_page;
+        let elapsed = start.elapsed().as_secs_f64();
 
-        if start.elapsed().as_secs_f64() > 30.0 {
+        if elapsed > 30.0 {
+            count = count + inc;
+            // estimate time to complete
+            let etc_sec = elapsed / (inc as f64) * (total_count as f64 - count as f64);
+            let etc = HumanDuration(Duration::from_secs(etc_sec as u64));
+            progress_bar
+                .clone()
+                .with_message(format!(
+                    "{:.2}% ETC:{} ratelimit:{}ms",
+                    count as f64 / total_count as f64 * 100.0,
+                    etc,
+                    sleep_time
+                ))
+                .inc(inc as u64);
+            start = Instant::now();
+            inc = 0;
+
             if sleep_time >= 0.0 {
                 let tmp_sleep_time = match fs::read_to_string(".ratelimit").await {
                     std::result::Result::Ok(content) => content.trim().parse().unwrap(),
@@ -234,25 +253,6 @@ async fn produce_hits(
                     sleep_time = tmp_sleep_time;
                 }
             }
-
-            let elapsed = start.elapsed().as_secs_f64();
-            // estimate time to complete
-            let etc_sec =
-                elapsed / (APP_CONFIG.size_per_page as f64) * (total_count as f64 - count as f64);
-            let etc_hour = etc_sec / 3600.0;
-            let etc_day = etc_hour / 24.0;
-            progress_bar
-                .clone()
-                .with_message(format!(
-                    "{:.2}% ETC:{:.1}D | {:.1}H | {:.0}S ratelimit:{}ms",
-                    count as f64 / total_count as f64 * 100.0,
-                    etc_day,
-                    etc_hour,
-                    etc_sec,
-                    sleep_time
-                ))
-                .inc(APP_CONFIG.size_per_page as u64);
-            start = Instant::now();
         }
 
         response = src_client
