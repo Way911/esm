@@ -24,6 +24,24 @@ async fn main() -> anyhow::Result<()> {
     let transport = Transport::single_node(&APP_CONFIG.src_url)?;
     let src_client = Elasticsearch::new(transport);
 
+    let query = match APP.query_json.clone() {
+        Some(json_string) => {
+            println!("query json: {}", json_string);
+            serde_json::from_str(&json_string)?
+        }
+        None => json!(
+            {
+                "match_all": {}
+                // "range": {
+                //     "datetime": {
+                //     "gte": 45180,
+                //     "lte": 45180.299
+                //     }
+                // }
+            }
+        ),
+    };
+
     // Create a MultiProgress object
     let multi_progress = MultiProgress::new();
     // Define a common progress bar style
@@ -33,7 +51,7 @@ async fn main() -> anyhow::Result<()> {
     .unwrap()
     .progress_chars("#>-");
 
-    let total_count = count_hits(src_client.clone()).await?;
+    let total_count = count_hits(src_client.clone(), query.clone()).await?;
 
     let (tx, rx) = flume::bounded(APP_CONFIG.bulk_size as usize * APP_CONFIG.dest_urls.len());
 
@@ -41,26 +59,30 @@ async fn main() -> anyhow::Result<()> {
     let mut consumers = vec![];
 
     for dest_url in &APP_CONFIG.dest_urls {
-        let tmp_total_count = total_count / APP_CONFIG.dest_urls.len() as u64;
-        let progress_bar = multi_progress.add(ProgressBar::new(tmp_total_count)); // Add a new progress bar
-        progress_bar.set_style(progress_style.clone());
-        progress_bar.set_message(format!("Consumer {}", dest_url));
-
         let rx = rx.clone();
-        let consumer = tokio::spawn(consume_hits(rx, dest_url, tmp_total_count, progress_bar));
+        let consumer = tokio::spawn(consume_hits(rx, dest_url));
         consumers.push(consumer);
     }
 
-    let progress_style = ProgressStyle::with_template("{msg}").unwrap();
-
     for id in 0..APP_CONFIG.worker_count {
-        let progress_bar = multi_progress.add(ProgressBar::new(0)); // Add a new progress bar
+        let tmp_total_count = total_count / APP_CONFIG.worker_count as u64;
+        let progress_bar = multi_progress.add(ProgressBar::new(tmp_total_count)); // Add a new progress bar
         progress_bar.set_style(progress_style.clone());
+        progress_bar
+            .clone()
+            .set_message(format!("producer #{} running", id));
 
         // The sender endpoint can be copied
         let thread_tx: Sender<BulkOperation<Value>> = tx.clone();
         let src_client = src_client.clone();
-        let p = tokio::spawn(produce_hits(id, src_client, thread_tx, progress_bar));
+        let p = tokio::spawn(produce_hits(
+            id,
+            src_client,
+            query.clone(),
+            thread_tx,
+            progress_bar,
+            tmp_total_count,
+        ));
         producers.push(p);
     }
 
@@ -81,25 +103,7 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn count_hits(client: Elasticsearch) -> anyhow::Result<u64> {
-    let query = match APP.query_json.clone() {
-        Some(json_string) => {
-            println!("query json: {}", json_string);
-            serde_json::from_str(&json_string)?
-        }
-        None => json!(
-            {
-                "match_all": {}
-                // "range": {
-                //     "datetime": {
-                //     "gte": 45180,
-                //     "lte": 45180.299
-                //     }
-                // }
-            }
-        ),
-    };
-
+async fn count_hits(client: Elasticsearch, query: Value) -> anyhow::Result<u64> {
     let response = client
         .count(elasticsearch::CountParts::Index(&[&APP_CONFIG.src_index]))
         .body(json!({
@@ -114,22 +118,14 @@ async fn count_hits(client: Elasticsearch) -> anyhow::Result<u64> {
         .ok_or(anyhow::anyhow!("no count"))
 }
 
-async fn consume_hits(
-    rx: Receiver<BulkOperation<Value>>,
-    dest_url: &str,
-    total_count: u64,
-    progress_bar: ProgressBar,
-) -> anyhow::Result<()> {
+async fn consume_hits(rx: Receiver<BulkOperation<Value>>, dest_url: &str) -> anyhow::Result<()> {
     let transport = Transport::single_node(dest_url)?;
     let dest_client = Elasticsearch::new(transport);
 
     let capacity = APP_CONFIG.bulk_size as usize;
     let mut ops: Vec<BulkOperation<Value>> = Vec::with_capacity(capacity);
-    let mut start = Instant::now();
-    let mut count = 0;
 
     while let core::result::Result::Ok(op) = rx.recv_async().await {
-        // println!("recv op");
         ops.push(op);
         if ops.len() >= capacity {
             let bulk_response = dest_client
@@ -140,24 +136,7 @@ async fn consume_hits(
             if bulk_response.status_code() != 200 {
                 anyhow::bail!("bulk error {:?}", bulk_response);
             }
-            count += capacity;
-            let elapsed = start.elapsed().as_secs_f64();
-            // estimate time to complete
-            let etc_sec = elapsed / (capacity as f64) * (total_count as f64 - count as f64);
-            let etc_hour = etc_sec / 3600.0;
-            let etc_day = etc_hour / 24.0;
-            progress_bar
-                .clone()
-                .with_message(format!(
-                    "{:.2}% ETC: {:.2} day | {:.2} hour | {:.2} sec",
-                    count as f64 / total_count as f64 * 100.0,
-                    etc_day,
-                    etc_hour,
-                    etc_sec
-                ))
-                .inc(capacity as u64);
             ops = Vec::with_capacity(capacity);
-            start = Instant::now();
         }
     }
 
@@ -173,38 +152,18 @@ async fn consume_hits(
             anyhow::bail!("bulk error {:?}", bulk_response);
         }
     }
-    progress_bar.finish_with_message(format!(
-        "{} finished, total_count: {}",
-        dest_url, total_count
-    ));
     Ok(())
 }
 
 async fn produce_hits(
     id: u32,
     src_client: Elasticsearch,
+    query: Value,
     tx: Sender<BulkOperation<Value>>,
     progress_bar: ProgressBar,
+    total_count: u64,
 ) -> anyhow::Result<()> {
-    progress_bar
-        .clone()
-        .set_message(format!("producer #{} running", id));
     let scroll = "1m";
-
-    let query = match APP.query_json.clone() {
-        Some(json_string) => serde_json::from_str(&json_string)?,
-        None => json!(
-            {
-                "match_all": {}
-                // "range": {
-                //     "datetime": {
-                //     "gte": 45180,
-                //     "lte": 45180.299
-                //     }
-                // }
-            }
-        ),
-    };
 
     // make a search API call
     let mut response = src_client
@@ -245,6 +204,7 @@ async fn produce_hits(
     };
 
     let mut start = Instant::now();
+    let mut count = 0;
 
     // while hits are returned, keep asking for the next batch
     while !hits.is_empty() {
@@ -260,19 +220,39 @@ async fn produce_hits(
         // sleep if rate limit file is provided and elapsed time
         if sleep_time >= 0.0 {
             time::sleep(Duration::from_millis(sleep_time as u64)).await;
-            if start.elapsed().as_secs_f64() > 60.0 {
+        }
+
+        count += APP_CONFIG.size_per_page;
+
+        if start.elapsed().as_secs_f64() > 30.0 {
+            if sleep_time >= 0.0 {
                 let tmp_sleep_time = match fs::read_to_string(".ratelimit").await {
                     std::result::Result::Ok(content) => content.trim().parse().unwrap(),
                     Err(_) => 0.0,
                 };
                 if tmp_sleep_time != sleep_time {
                     sleep_time = tmp_sleep_time;
-                    progress_bar
-                        .clone()
-                        .set_message(format!("producer #{} ratelimit: {}", id, sleep_time));
                 }
-                start = Instant::now();
             }
+
+            let elapsed = start.elapsed().as_secs_f64();
+            // estimate time to complete
+            let etc_sec =
+                elapsed / (APP_CONFIG.size_per_page as f64) * (total_count as f64 - count as f64);
+            let etc_hour = etc_sec / 3600.0;
+            let etc_day = etc_hour / 24.0;
+            progress_bar
+                .clone()
+                .with_message(format!(
+                    "{:.2}% ETC:{:.1}D | {:.1}H | {:.0}S ratelimit:{}ms",
+                    count as f64 / total_count as f64 * 100.0,
+                    etc_day,
+                    etc_hour,
+                    etc_sec,
+                    sleep_time
+                ))
+                .inc(APP_CONFIG.size_per_page as u64);
+            start = Instant::now();
         }
 
         response = src_client
@@ -292,7 +272,8 @@ async fn produce_hits(
             .as_array()
             .ok_or(anyhow::anyhow!("no hits"))?;
     }
-    progress_bar.finish_with_message(format!("producer #{} done", id));
+
+    progress_bar.finish_with_message(format!("producer #{} done total_count {}", id, total_count));
 
     Ok(())
 }
@@ -308,8 +289,25 @@ mod tests {
         let start = Instant::now();
         let transport = Transport::single_node(&APP_CONFIG.src_url).unwrap();
         let src_client = Elasticsearch::new(transport);
+        let query = match APP.query_json.clone() {
+            Some(json_string) => {
+                println!("query json: {}", json_string);
+                serde_json::from_str(&json_string).unwrap()
+            }
+            None => json!(
+                {
+                    "match_all": {}
+                    // "range": {
+                    //     "datetime": {
+                    //     "gte": 45180,
+                    //     "lte": 45180.299
+                    //     }
+                    // }
+                }
+            ),
+        };
         println!("{:?}", APP_CONFIG.src_url);
-        let count = count_hits(src_client).await.unwrap();
+        let count = count_hits(src_client, query).await.unwrap();
         println!("total hits: {}", count);
         println!("time: {:?}", start.elapsed());
     }
