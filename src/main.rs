@@ -229,32 +229,15 @@ async fn produce_hits(
 
         if elapsed > 15.0 {
             count = count + inc;
-            if progress_bar.is_hidden() {
-                // estimate time to complete
-                let etc_sec = elapsed / (inc as f64) * (total_count as f64 - count as f64);
-                let etc = HumanDuration(Duration::from_secs(etc_sec as u64));
-                println!(
-                    "producer #{} {}/{} {:.2}% ETC:{} ratelimit:{}ms",
-                    id,
-                    count,
-                    total_count,
-                    count as f64 / total_count as f64 * 100.0,
-                    etc,
-                    sleep_time
-                )
-            } else {
-                progress_bar
-                    .clone()
-                    .with_message(format!(
-                        // "producer #{} {:.2}% ETC:{} ratelimit:{}ms",
-                        "producer #{} ratelimit:{}ms",
-                        id,
-                        // count as f64 / total_count as f64 * 100.0,
-                        // etc,
-                        sleep_time
-                    ))
-                    .inc(inc as u64);
-            }
+            update_progress_bar(
+                id,
+                &progress_bar,
+                total_count,
+                sleep_time,
+                count,
+                inc,
+                elapsed,
+            );
             start = Instant::now();
             inc = 0;
 
@@ -287,12 +270,53 @@ async fn produce_hits(
             .ok_or(anyhow::anyhow!("no hits"))?;
     }
 
+    finish_progress_bar(id, progress_bar, total_count);
+
+    Ok(())
+}
+
+fn finish_progress_bar(id: u32, progress_bar: ProgressBar, total_count: u64) {
     if progress_bar.is_hidden() {
         println!("producer #{} done total_count {}", id, total_count)
     }
     progress_bar.finish_with_message(format!("producer #{} done total_count {}", id, total_count));
+}
 
-    Ok(())
+fn update_progress_bar(
+    id: u32,
+    progress_bar: &ProgressBar,
+    total_count: u64,
+    sleep_time: f64,
+    count: usize,
+    inc: usize,
+    elapsed: f64,
+) {
+    if progress_bar.is_hidden() {
+        // estimate time to complete
+        let etc_sec = elapsed / (inc as f64) * (total_count as f64 - count as f64);
+        let etc = HumanDuration(Duration::from_secs(etc_sec as u64));
+        println!(
+            "producer #{} {}/{} {:.2}% ETC:{} ratelimit:{}ms",
+            id,
+            count,
+            total_count,
+            count as f64 / total_count as f64 * 100.0,
+            etc,
+            sleep_time
+        )
+    } else {
+        progress_bar
+            .clone()
+            .with_message(format!(
+                // "producer #{} {:.2}% ETC:{} ratelimit:{}ms",
+                "producer #{} ratelimit:{}ms",
+                id,
+                // count as f64 / total_count as f64 * 100.0,
+                // etc,
+                sleep_time
+            ))
+            .inc(inc as u64);
+    }
 }
 
 #[cfg(test)]
