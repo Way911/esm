@@ -1,4 +1,4 @@
-use std::{time::Duration, vec};
+use std::{cmp::max, time::Duration, vec};
 
 use anyhow::Ok;
 use config::APP_CONFIG;
@@ -53,7 +53,10 @@ async fn main() -> anyhow::Result<()> {
 
     let total_count = count_hits(src_client.clone(), query.clone()).await?;
 
-    let (tx, rx) = flume::bounded(APP_CONFIG.bulk_size as usize * APP_CONFIG.dest_urls.len());
+    let (tx, rx) = flume::bounded(max(
+        APP_CONFIG.bulk_size as usize * (APP_CONFIG.dest_urls.len() + 1),
+        APP_CONFIG.size_per_page as usize * (APP_CONFIG.worker_count + 1) as usize,
+    ));
 
     let mut producers = vec![];
     let mut consumers = vec![];
