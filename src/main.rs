@@ -287,6 +287,9 @@ async fn produce_hits(
             .ok_or(anyhow::anyhow!("no hits"))?;
     }
 
+    if progress_bar.is_hidden() {
+        println!("producer #{} done total_count {}", id, total_count)
+    }
     progress_bar.finish_with_message(format!("producer #{} done total_count {}", id, total_count));
 
     Ok(())
