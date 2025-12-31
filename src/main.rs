@@ -13,7 +13,7 @@ use tokio::{
     time::{self, Instant},
 };
 
-use indicatif::{HumanDuration, MultiProgress, ProgressBar, ProgressStyle};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
 use crate::config::APP;
 
@@ -46,7 +46,7 @@ async fn main() -> anyhow::Result<()> {
     let multi_progress = MultiProgress::new();
     // Define a common progress bar style
     let progress_style = ProgressStyle::with_template(
-        "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
+        "[{elapsed}/{eta}] {percent_precise} {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
     )
     .unwrap()
     .progress_chars("#>-");
@@ -230,15 +230,16 @@ async fn produce_hits(
         if elapsed > 15.0 {
             count = count + inc;
             // estimate time to complete
-            let etc_sec = elapsed / (inc as f64) * (total_count as f64 - count as f64);
-            let etc = HumanDuration(Duration::from_secs(etc_sec as u64));
+            // let etc_sec = elapsed / (inc as f64) * (total_count as f64 - count as f64);
+            // let etc = HumanDuration(Duration::from_secs(etc_sec as u64));
             progress_bar
                 .clone()
                 .with_message(format!(
-                    "producer #{} {:.2}% ETC:{} ratelimit:{}ms",
+                    // "producer #{} {:.2}% ETC:{} ratelimit:{}ms",
+                    "producer #{} ratelimit:{}ms",
                     id,
-                    count as f64 / total_count as f64 * 100.0,
-                    etc,
+                    // count as f64 / total_count as f64 * 100.0,
+                    // etc,
                     sleep_time
                 ))
                 .inc(inc as u64);
