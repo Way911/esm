@@ -46,7 +46,7 @@ async fn main() -> anyhow::Result<()> {
     let multi_progress = MultiProgress::new();
     // Define a common progress bar style
     let progress_style = ProgressStyle::with_template(
-        "[{elapsed}/{eta}] {percent_precise} {per_sec} [{bar:40.cyan/blue}] {pos:>7}/{len:7} {msg}",
+        "{msg} {bar:40.cyan/blue} {percent_precise} {pos:>7}/{len:7} ETA: {eta} Elapsed: {elapsed} {per_sec}",
     )
     .unwrap()
     .progress_chars("#>-");
