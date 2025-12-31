@@ -235,7 +235,8 @@ async fn produce_hits(
             progress_bar
                 .clone()
                 .with_message(format!(
-                    "{:.2}% ETC:{} ratelimit:{}ms",
+                    "producer #{} {:.2}% ETC:{} ratelimit:{}ms",
+                    id,
                     count as f64 / total_count as f64 * 100.0,
                     etc,
                     sleep_time
