@@ -71,9 +71,7 @@ async fn main() -> anyhow::Result<()> {
         let tmp_total_count = total_count / APP_CONFIG.worker_count as u64;
         let progress_bar = multi_progress.add(ProgressBar::new(tmp_total_count)); // Add a new progress bar
         progress_bar.set_style(progress_style.clone());
-        progress_bar
-            .clone()
-            .set_message(format!("producer #{} running", id));
+        progress_bar.set_message(format!("producer #{} running", id));
 
         // The sender endpoint can be copied
         let thread_tx: Sender<BulkOperation<Value>> = tx.clone();
