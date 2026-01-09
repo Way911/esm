@@ -52,7 +52,9 @@ async fn main() -> anyhow::Result<()> {
         progress_bar.set_message(format!("running with rate limit: {} ms", 0.0));
 
         loop {
-            let cur_sleeptime = *sleeptime_w.read().await;
+            let cur_sleeptime_lk = sleeptime_w.read().await;
+            let cur_sleeptime = *cur_sleeptime_lk;
+            drop(cur_sleeptime_lk);
 
             let tmp_sleep_time = match fs::read_to_string(".ratelimit").await {
                 std::result::Result::Ok(content) => content.trim().parse().unwrap(),
@@ -78,7 +80,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Define a common progress bar style
     let progress_style = ProgressStyle::with_template(
-        "{spinner} {msg} {bar:40.cyan/blue} {percent_precise} {pos:>7}/{len:7} ETA: {eta} Elapsed: {elapsed} {per_sec}",
+        "{prefix} {spinner} {bar:40.cyan/blue} {percent_precise} {pos:>7}/{len:7} ETA:{eta} Elapsed:{elapsed} {per_sec}",
     )
     .unwrap()
     .progress_chars("#>-");
@@ -104,7 +106,10 @@ async fn main() -> anyhow::Result<()> {
         let progress_bar = multi_progress.add(ProgressBar::new(tmp_total_count)); // Add a new progress bar
         progress_bar.set_style(progress_style.clone());
         progress_bar.set_message(format!("producer #{} running", id));
-        progress_bar.enable_steady_tick(Duration::from_millis(500));
+        if !progress_bar.is_hidden() {
+            progress_bar.enable_steady_tick(Duration::from_millis(500));
+        }
+        progress_bar.set_prefix(format!("producer #{}", id));
 
         // The sender endpoint can be copied
         let thread_tx: Sender<BulkOperation<Value>> = tx.clone();
@@ -231,7 +236,7 @@ async fn produce_hits(
     let mut start = Instant::now();
     let mut count = 0;
     let mut inc = 0;
-    let mut enable_sleep = *sleeptime.read().await >= 0.0;
+    let mut enable_sleep = true;
 
     // while hits are returned, keep asking for the next batch
     while !hits.is_empty() {
@@ -274,10 +279,7 @@ async fn produce_hits(
                 inc = 0;
             }
         } else {
-            progress_bar
-                .clone()
-                .with_message(format!("producer #{}", id))
-                .inc(hits.len() as u64);
+            progress_bar.inc(hits.len() as u64);
         }
 
         response = src_client
