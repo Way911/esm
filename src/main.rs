@@ -63,7 +63,11 @@ async fn main() -> anyhow::Result<()> {
                 let mut writable_data = sleeptime_w.write().await;
                 *writable_data = tmp_sleep_time;
             }
-            progress_bar.set_message(format!("running with rate limit: {} ms", tmp_sleep_time));
+            if progress_bar.is_hidden() {
+                println!("running with rate limit: {} ms", tmp_sleep_time)
+            } else {
+                progress_bar.set_message(format!("running with rate limit: {} ms", tmp_sleep_time));
+            }
             if tmp_sleep_time < 0.0 {
                 return;
             }
