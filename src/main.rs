@@ -40,7 +40,7 @@ async fn main() -> anyhow::Result<()> {
     // Create a MultiProgress object
     let multi_progress = MultiProgress::new();
 
-    let sleeptime = Arc::new(RwLock::new(0.0));
+    let sleeptime = Arc::new(RwLock::new(-1.0));
 
     // Spawn a task that writes to the ratelimit
     let progress_bar = multi_progress.add(ProgressBar::no_length()); // Add a new progress bar
@@ -56,7 +56,7 @@ async fn main() -> anyhow::Result<()> {
 
             let tmp_sleep_time = match fs::read_to_string(".ratelimit").await {
                 std::result::Result::Ok(content) => content.trim().parse().unwrap(),
-                Err(_) => 0.0,
+                Err(_) => -1.0,
             };
             if tmp_sleep_time != cur_sleeptime {
                 // Acquire a write lock
@@ -244,8 +244,6 @@ async fn produce_hits(
             tx.send_async(op).await?;
         }
 
-        inc += hits.len();
-
         // sleep if rate limit file is provided and elapsed time
         if enable_sleep {
             let sleep_time = *sleeptime.read().await;
@@ -256,13 +254,30 @@ async fn produce_hits(
             }
         }
 
-        let elapsed = start.elapsed().as_secs_f64();
-
-        if elapsed > 5.0 {
-            count = count + inc;
-            update_progress_bar(id, &progress_bar, total_count, count, inc, elapsed);
-            start = Instant::now();
-            inc = 0;
+        if progress_bar.is_hidden() {
+            inc += hits.len();
+            let elapsed = start.elapsed().as_secs_f64();
+            if elapsed > 15.0 {
+                count = count + inc;
+                // estimate time to complete
+                let etc_sec = elapsed / (inc as f64) * (total_count as f64 - count as f64);
+                let etc = HumanDuration(Duration::from_secs(etc_sec as u64));
+                println!(
+                    "producer #{} {}/{} {:.2}% ETC:{}",
+                    id,
+                    count,
+                    total_count,
+                    count as f64 / total_count as f64 * 100.0,
+                    etc
+                );
+                start = Instant::now();
+                inc = 0;
+            }
+        } else {
+            progress_bar
+                .clone()
+                .with_message(format!("producer #{}", id))
+                .inc(hits.len() as u64);
         }
 
         response = src_client
