@@ -106,9 +106,6 @@ async fn main() -> anyhow::Result<()> {
         let progress_bar = multi_progress.add(ProgressBar::new(tmp_total_count)); // Add a new progress bar
         progress_bar.set_style(progress_style.clone());
         progress_bar.set_message(format!("producer #{} running", id));
-        if !progress_bar.is_hidden() {
-            progress_bar.enable_steady_tick(Duration::from_millis(500));
-        }
         progress_bar.set_prefix(format!("producer #{}", id));
 
         // The sender endpoint can be copied
@@ -237,6 +234,7 @@ async fn produce_hits(
     let mut count = 0;
     let mut inc = 0;
     let mut enable_sleep = true;
+    let is_progress_bar_hidden = progress_bar.is_hidden();
 
     // while hits are returned, keep asking for the next batch
     while !hits.is_empty() {
@@ -259,7 +257,7 @@ async fn produce_hits(
             }
         }
 
-        if progress_bar.is_hidden() {
+        if is_progress_bar_hidden {
             inc += hits.len();
             let elapsed = start.elapsed().as_secs_f64();
             if elapsed > 15.0 {
@@ -300,16 +298,12 @@ async fn produce_hits(
             .ok_or(anyhow::anyhow!("no hits"))?;
     }
 
-    finish_progress_bar(id, progress_bar, total_count);
-
-    Ok(())
-}
-
-fn finish_progress_bar(id: u32, progress_bar: ProgressBar, total_count: u64) {
-    if progress_bar.is_hidden() {
+    if is_progress_bar_hidden {
         println!("producer #{} done total_count {}", id, total_count)
     }
     progress_bar.finish_with_message(format!("producer #{} done total_count {}", id, total_count));
+
+    Ok(())
 }
 
 #[cfg(test)]
