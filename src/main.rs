@@ -1,4 +1,12 @@
-use std::{cmp::max, sync::Arc, time::Duration, vec};
+use std::{
+    cmp::max,
+    sync::{
+        atomic::{AtomicI32, Ordering},
+        Arc,
+    },
+    time::Duration,
+    vec,
+};
 
 use anyhow::Ok;
 use config::APP_CONFIG;
@@ -10,7 +18,6 @@ use flume::{Receiver, Sender};
 use serde_json::{json, Value};
 use tokio::{
     fs,
-    sync::RwLock,
     time::{self, Instant},
 };
 
@@ -40,45 +47,27 @@ async fn main() -> anyhow::Result<()> {
     // Create a MultiProgress object
     let multi_progress = MultiProgress::new();
 
-    let sleeptime = Arc::new(RwLock::new(-1.0));
-
-    // Spawn a task that writes to the ratelimit
-    let progress_bar = multi_progress.add(ProgressBar::no_length()); // Add a new progress bar
+    let sleeptime = Arc::new(AtomicI32::new(-1));
     let sleeptime_w = sleeptime.clone();
     tokio::spawn(async move {
-        // Define a common progress bar style
-        let progress_style = ProgressStyle::with_template("{msg}").unwrap();
-        progress_bar.set_style(progress_style);
-        progress_bar.set_message(format!("running with rate limit: {} ms", 0.0));
-
         loop {
-            let cur_sleeptime = *sleeptime_w.read().await;
-
             let tmp_sleep_time = match fs::read_to_string(".ratelimit").await {
                 std::result::Result::Ok(content) => content.trim().parse().unwrap(),
-                Err(_) => -1.0,
+                Err(_) => -1,
             };
-            if tmp_sleep_time != cur_sleeptime {
-                // Acquire a write lock
-                let mut writable_data = sleeptime_w.write().await;
-                *writable_data = tmp_sleep_time;
+            if tmp_sleep_time != sleeptime_w.load(Ordering::Relaxed) {
+                sleeptime_w.store(tmp_sleep_time, Ordering::Relaxed);
             }
-            if progress_bar.is_hidden() {
-                println!("running with rate limit: {} ms", tmp_sleep_time)
-            } else {
-                progress_bar.set_message(format!("running with rate limit: {} ms", tmp_sleep_time));
-            }
-            if tmp_sleep_time < 0.0 {
+            if tmp_sleep_time < 0 {
                 return;
             }
-            // Lock is automatically released when `writable_data` goes out of scope
             tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
         }
     });
 
     // Define a common progress bar style
     let progress_style = ProgressStyle::with_template(
-        "{prefix} {spinner} {bar:40.cyan/blue} {percent_precise} {pos:>7}/{len:7} ETA:{eta} Elapsed:{elapsed} {per_sec}",
+        "{prefix} {spinner} {bar:40.cyan/blue} {percent_precise} {pos:>7}/{len:7} ETA:{eta} Elapsed:{elapsed} {per_sec} {msg}",
     )
     .unwrap()
     .progress_chars("#>-");
@@ -197,7 +186,7 @@ async fn produce_hits(
     tx: Sender<BulkOperation<Value>>,
     progress_bar: ProgressBar,
     total_count: u64,
-    sleeptime: Arc<RwLock<f64>>,
+    sleeptime: Arc<AtomicI32>,
 ) -> anyhow::Result<()> {
     let scroll = "1m";
 
@@ -231,7 +220,7 @@ async fn produce_hits(
     let mut start = Instant::now();
     let mut count = 0;
     let mut inc = 0;
-    let mut enable_sleep = true;
+    let mut sleep_time = sleeptime.load(Ordering::Relaxed);
     let is_progress_bar_hidden = progress_bar.is_hidden();
 
     // while hits are returned, keep asking for the next batch
@@ -246,13 +235,9 @@ async fn produce_hits(
         }
 
         // sleep if rate limit file is provided and elapsed time
-        if enable_sleep {
-            let sleep_time = *sleeptime.read().await;
-            if sleep_time < 0.0 {
-                enable_sleep = false;
-            } else {
-                time::sleep(Duration::from_millis(sleep_time as u64)).await;
-            }
+        if sleep_time >= 0 {
+            time::sleep(Duration::from_millis(sleep_time as u64)).await;
+            sleep_time = sleeptime.load(Ordering::Relaxed);
         }
 
         if is_progress_bar_hidden {
@@ -264,18 +249,22 @@ async fn produce_hits(
                 let etc_sec = elapsed / (inc as f64) * (total_count as f64 - count as f64);
                 let etc = HumanDuration(Duration::from_secs(etc_sec as u64));
                 println!(
-                    "producer #{} {}/{} {:.2}% ETC:{}",
+                    "producer #{} {}/{} {:.2}% ETC:{} ratelimit:{}",
                     id,
                     count,
                     total_count,
                     count as f64 / total_count as f64 * 100.0,
-                    etc
+                    etc,
+                    sleep_time
                 );
                 start = Instant::now();
                 inc = 0;
             }
         } else {
-            progress_bar.inc(hits.len() as u64);
+            progress_bar
+                .clone()
+                .with_message(format!("ratelime:{}", sleep_time))
+                .inc(hits.len() as u64);
         }
 
         response = src_client
