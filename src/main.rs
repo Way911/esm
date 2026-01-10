@@ -52,9 +52,7 @@ async fn main() -> anyhow::Result<()> {
         progress_bar.set_message(format!("running with rate limit: {} ms", 0.0));
 
         loop {
-            let cur_sleeptime_lk = sleeptime_w.read().await;
-            let cur_sleeptime = *cur_sleeptime_lk;
-            drop(cur_sleeptime_lk);
+            let cur_sleeptime = *sleeptime_w.read().await;
 
             let tmp_sleep_time = match fs::read_to_string(".ratelimit").await {
                 std::result::Result::Ok(content) => content.trim().parse().unwrap(),
