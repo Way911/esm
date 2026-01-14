@@ -110,7 +110,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let progress_bar = multi_progress.add(ProgressBar::new(total_count)); // Add a new progress bar
-    progress_bar.set_style(progress_style.clone());
+    progress_bar.set_style(progress_style);
     progress_bar.set_prefix("producers");
     progress_bar.set_message("running");
 
