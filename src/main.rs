@@ -98,21 +98,21 @@ async fn main() -> anyhow::Result<()> {
     let mut producers = vec![];
     let mut consumers = vec![];
 
-    let progress_bar = multi_progress.add(ProgressBar::new(total_count)); // Add a new progress bar
-    progress_bar.set_style(progress_style.clone());
-    progress_bar.set_prefix("consumers");
-    progress_bar.set_message("running");
+    let progress_bar_con = multi_progress.add(ProgressBar::new(total_count)); // Add a new progress bar
+    progress_bar_con.set_style(progress_style.clone());
+    progress_bar_con.set_prefix("consumers");
+    progress_bar_con.set_message("running");
 
     for dest_url in &APP_CONFIG.dest_urls {
         let rx = rx.clone();
-        let consumer = tokio::spawn(consume_hits(rx, dest_url, progress_bar.clone()));
+        let consumer = tokio::spawn(consume_hits(rx, dest_url, progress_bar_con.clone()));
         consumers.push(consumer);
     }
 
-    let progress_bar = multi_progress.add(ProgressBar::new(total_count)); // Add a new progress bar
-    progress_bar.set_style(progress_style);
-    progress_bar.set_prefix("producers");
-    progress_bar.set_message("running");
+    let progress_bar_pro = multi_progress.add(ProgressBar::new(total_count)); // Add a new progress bar
+    progress_bar_pro.set_style(progress_style);
+    progress_bar_pro.set_prefix("producers");
+    progress_bar_pro.set_message("running");
 
     for id in 0..APP_CONFIG.worker_count {
         let tmp_total_count = total_count / APP_CONFIG.worker_count as u64;
@@ -125,7 +125,7 @@ async fn main() -> anyhow::Result<()> {
             src_client,
             query.clone(),
             thread_tx,
-            progress_bar.clone(),
+            progress_bar_pro.clone(),
             tmp_total_count,
             sleeptime.clone(),
         ));
@@ -137,6 +137,7 @@ async fn main() -> anyhow::Result<()> {
             eprintln!("error: {:?}", e);
         }
     }
+    progress_bar_pro.finish_with_message("done");
 
     drop(tx);
 
@@ -145,6 +146,7 @@ async fn main() -> anyhow::Result<()> {
             eprintln!("error: {:?}", e);
         }
     }
+    progress_bar_con.finish_with_message("done");
 
     Ok(())
 }
@@ -203,7 +205,6 @@ async fn consume_hits(
             anyhow::bail!("bulk error {:?}", bulk_response);
         }
     }
-    progress_bar.finish();
     Ok(())
 }
 
@@ -320,7 +321,6 @@ async fn produce_hits(
     if is_progress_bar_hidden {
         println!("producer #{} done total_count {}", id, total_count)
     }
-    progress_bar.finish_with_message(format!("producer #{} done total_count {}", id, total_count));
 
     Ok(())
 }
