@@ -203,6 +203,7 @@ async fn consume_hits(
             anyhow::bail!("bulk error {:?}", bulk_response);
         }
     }
+    progress_bar.finish();
     Ok(())
 }
 
