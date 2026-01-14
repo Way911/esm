@@ -4,7 +4,7 @@ use std::{
         atomic::{AtomicI32, Ordering},
         Arc,
     },
-    time::Duration,
+    time::{Duration, SystemTime},
     vec,
 };
 
@@ -50,17 +50,33 @@ async fn main() -> anyhow::Result<()> {
     let sleeptime = Arc::new(AtomicI32::new(-1));
     let sleeptime_w = sleeptime.clone();
     tokio::spawn(async move {
+        let mut last_modified = SystemTime::now();
         loop {
-            let tmp_sleep_time = match fs::read_to_string(".ratelimit").await {
-                std::result::Result::Ok(content) => content.trim().parse().unwrap(),
-                Err(_) => -1,
+            let tmp_last_modified = match fs::metadata(".ratelimit").await {
+                std::result::Result::Ok(metadata) => match metadata.modified() {
+                    std::result::Result::Ok(time) => time,
+                    Err(_) => return,
+                },
+                std::result::Result::Err(_) => {
+                    return;
+                }
             };
-            if tmp_sleep_time != sleeptime_w.load(Ordering::Relaxed) {
-                sleeptime_w.store(tmp_sleep_time, Ordering::Relaxed);
+
+            if last_modified != tmp_last_modified {
+                let tmp_sleep_time = match fs::read_to_string(".ratelimit").await {
+                    std::result::Result::Ok(content) => content.trim().parse().unwrap(),
+                    Err(_) => -1,
+                };
+                if tmp_sleep_time != sleeptime_w.load(Ordering::Relaxed) {
+                    sleeptime_w.store(tmp_sleep_time, Ordering::Relaxed);
+                }
+                if tmp_sleep_time < 0 {
+                    return;
+                }
             }
-            if tmp_sleep_time < 0 {
-                return;
-            }
+
+            last_modified = tmp_last_modified;
+
             tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
         }
     });
