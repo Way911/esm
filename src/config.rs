@@ -36,5 +36,15 @@ pub(crate) static APP: LazyLock<App> = LazyLock::new(|| App {
 });
 
 pub(crate) static APP_CONFIG: LazyLock<AppConfig> = LazyLock::new(|| {
-    toml::from_str::<AppConfig>(&std::fs::read_to_string(&APP.cfg_file_path).unwrap()).unwrap()
+    let config = toml::from_str::<AppConfig>(
+        &std::fs::read_to_string(&APP.cfg_file_path).expect("Failed to read config file"),
+    )
+    .expect("Failed to parse config file");
+
+    assert!(!config.src_url.is_empty(), "src_url cannot be empty");
+    assert!(config.worker_count > 0, "worker_count must be positive");
+    assert!(config.size_per_page > 0, "size_per_page must be positive");
+    assert!(config.bulk_size > 0, "bulk_size must be positive");
+
+    config
 });

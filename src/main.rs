@@ -244,8 +244,12 @@ async fn produce_hits(
         // println!("send len: {}", hits.len());
 
         for hit in hits {
-            let id = hit["_id"].as_str().unwrap();
-            let source = hit["_source"].as_object().unwrap().clone();
+            let id = hit["_id"]
+                .as_str()
+                .ok_or_else(|| anyhow::anyhow!("Missing _id field"))?;
+            let source = hit["_source"]
+                .as_object()
+                .ok_or_else(|| anyhow::anyhow!("Missing _source field"))?;
             let op = BulkOperation::index(json!(source)).id(id).into();
             tx.send_async(op).await?;
         }
