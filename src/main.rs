@@ -83,7 +83,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Define a common progress bar style
     let progress_style = ProgressStyle::with_template(
-        "{prefix} {spinner} {bar:40.cyan/blue} {percent_precise} {pos:>7}/{len:7} ETA:{eta} Elapsed:{elapsed} {per_sec} {msg}",
+        "{prefix} {bar:40.cyan/blue} {percent_precise} {pos:>7}/{len:7} ETA:{eta} Elapsed:{elapsed} {per_sec} {msg}",
     )
     .unwrap()
     .progress_chars("#>-");
