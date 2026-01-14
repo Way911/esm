@@ -98,18 +98,24 @@ async fn main() -> anyhow::Result<()> {
     let mut producers = vec![];
     let mut consumers = vec![];
 
+    let progress_bar = multi_progress.add(ProgressBar::new(total_count)); // Add a new progress bar
+    progress_bar.set_style(progress_style.clone());
+    progress_bar.set_prefix("consumers");
+    progress_bar.set_message("running");
+
     for dest_url in &APP_CONFIG.dest_urls {
         let rx = rx.clone();
-        let consumer = tokio::spawn(consume_hits(rx, dest_url));
+        let consumer = tokio::spawn(consume_hits(rx, dest_url, progress_bar.clone()));
         consumers.push(consumer);
     }
 
+    let progress_bar = multi_progress.add(ProgressBar::new(total_count)); // Add a new progress bar
+    progress_bar.set_style(progress_style.clone());
+    progress_bar.set_prefix("producers");
+    progress_bar.set_message("running");
+
     for id in 0..APP_CONFIG.worker_count {
         let tmp_total_count = total_count / APP_CONFIG.worker_count as u64;
-        let progress_bar = multi_progress.add(ProgressBar::new(tmp_total_count)); // Add a new progress bar
-        progress_bar.set_style(progress_style.clone());
-        progress_bar.set_message(format!("producer #{} running", id));
-        progress_bar.set_prefix(format!("producer #{}", id));
 
         // The sender endpoint can be copied
         let thread_tx: Sender<BulkOperation<Value>> = tx.clone();
@@ -119,7 +125,7 @@ async fn main() -> anyhow::Result<()> {
             src_client,
             query.clone(),
             thread_tx,
-            progress_bar,
+            progress_bar.clone(),
             tmp_total_count,
             sleeptime.clone(),
         ));
@@ -158,7 +164,11 @@ async fn count_hits(client: Elasticsearch, query: Value) -> anyhow::Result<u64> 
         .ok_or(anyhow::anyhow!("no count"))
 }
 
-async fn consume_hits(rx: Receiver<BulkOperation<Value>>, dest_url: &str) -> anyhow::Result<()> {
+async fn consume_hits(
+    rx: Receiver<BulkOperation<Value>>,
+    dest_url: &str,
+    progress_bar: ProgressBar,
+) -> anyhow::Result<()> {
     let transport = Transport::single_node(dest_url)?;
     let dest_client = Elasticsearch::new(transport);
 
@@ -167,6 +177,7 @@ async fn consume_hits(rx: Receiver<BulkOperation<Value>>, dest_url: &str) -> any
 
     while let core::result::Result::Ok(op) = rx.recv_async().await {
         ops.push(op);
+        progress_bar.inc(1);
         if ops.len() >= capacity {
             let bulk_response = dest_client
                 .bulk(BulkParts::Index(&APP_CONFIG.dest_index))
