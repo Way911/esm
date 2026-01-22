@@ -23,9 +23,8 @@ jobs:
         filename: release-${{ env.RELEASE_VERSION }}.zip
         directory: './target/release'
         exclusions: '/*.fingerprint/* /*build/* /*deps/* /*incremental/* /*examples/* *.d'
-    - uses: "marvinpinto/action-automatic-releases@v1.2.1"
+    - name: Upload distributions
+      uses: actions/upload-artifact@v4
       with:
-        repo_token: "${{ secrets.PERSONAL_ACCESS_TOKEN }}"
-        prerelease: false
-        files: |
-          ./target/release/release-${{ env.RELEASE_VERSION }}.zip
+        name: release-dists
+        path: ./target/release/release-${{ env.RELEASE_VERSION }}.zip
