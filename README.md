@@ -1,3 +1,4 @@
+[![release on tag](https://github.com/Way911/esm/actions/workflows/release.yml/badge.svg?event=push)](https://github.com/Way911/esm/actions/workflows/release.yml)
 # esm
 
 ```bash
