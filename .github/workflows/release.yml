@@ -20,11 +20,12 @@ jobs:
       uses: thedoctor0/zip-release@0.6.2
       with:
         type: 'zip'
-        filename: release-${{ env.RELEASE_VERSION }}.zip
+        filename: release-${{ env.RELEASE_VERSION }}-ubuntu.zip
         directory: './target/release'
         exclusions: '/*.fingerprint/* /*build/* /*deps/* /*incremental/* /*examples/* *.d'
-    - name: Upload distributions
-      uses: actions/upload-artifact@v4
+    - uses: "marvinpinto/action-automatic-releases@v1.2.1"
       with:
-        name: release-dists
-        path: ./target/release/release-${{ env.RELEASE_VERSION }}.zip
+        repo_token: "${{ secrets.PERSONAL_ACCESS_TOKEN }}"
+        prerelease: false
+        files: |
+          ./target/release/release-${{ env.RELEASE_VERSION }}-ubuntu.zip
